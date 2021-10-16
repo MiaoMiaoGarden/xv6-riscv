@@ -9,6 +9,9 @@
 #include "proc.h"
 #include "sleeplock.h"
 
+// 睡眠锁，对自旋锁进行一层包装而形成，可以让线程在等待睡眠锁的过程中让出cpu。
+// 自旋锁记录了持锁cpu的id，睡眠锁在此基础上又记录了持锁线程pid。
+
 void
 initsleeplock(struct sleeplock *lk, char *name)
 {
@@ -23,7 +26,8 @@ acquiresleep(struct sleeplock *lk)
 {
   acquire(&lk->lk);
   while (lk->locked) {
-    sleep(lk, &lk->lk);
+    // 通过sleep出让cpu？
+    sleep(lk, &lk->lk);  // todo: sleep如何实现？
   }
   lk->locked = 1;
   lk->pid = myproc()->pid;
