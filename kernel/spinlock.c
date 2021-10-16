@@ -21,7 +21,10 @@ initlock(struct spinlock *lk, char *name)
 void
 acquire(struct spinlock *lk)
 {
+  // 临界区嵌套+1，关中断
   push_off(); // disable interrupts to avoid deadlock.
+  
+  // 不是直接返回而是panic，表示不可重复获取锁，可能是为了防止同一cpu上的前后两个线程，后者借用前者获得的锁。
   if(holding(lk))
     panic("acquire");
 
@@ -29,7 +32,7 @@ acquire(struct spinlock *lk)
   //   a5 = 1
   //   s1 = &lk->locked
   //   amoswap.w.aq a5, a5, (s1)
-  while(__sync_lock_test_and_set(&lk->locked, 1) != 0)
+  while(__sync_lock_test_and_set(&lk->locked, 1) != 0)  // 原子test&set，循环等待，“自旋”
     ;
 
   // Tell the C compiler and the processor to not move loads or stores
@@ -39,7 +42,7 @@ acquire(struct spinlock *lk)
   __sync_synchronize();
 
   // Record info about lock acquisition for holding() and debugging.
-  lk->cpu = mycpu();
+  lk->cpu = mycpu();  
 }
 
 // Release the lock.
@@ -67,10 +70,9 @@ release(struct spinlock *lk)
   // On RISC-V, sync_lock_release turns into an atomic swap:
   //   s1 = &lk->locked
   //   amoswap.w zero, zero, (s1)
-  // todo: 原子操作
-  __sync_lock_release(&lk->locked);
+  __sync_lock_release(&lk->locked);   // 执行原子赋值，将lk->locked置为0，即释放锁。
 
-  pop_off();
+  pop_off();   // 临界区嵌套-1，若临界区嵌套为0，则开中断。
 }
 
 // Check whether this cpu is holding the lock.
@@ -88,7 +90,10 @@ holding(struct spinlock *lk)
 // push_off/pop_off are like intr_off()/intr_on() except that they are matched:
 // it takes two pop_off()s to undo two push_off()s.  Also, if interrupts
 // are initially off, then push_off, pop_off leaves them off.
-// todo：push和pop有什么功能？
+// Q：push和pop有什么功能？
+// A：锁和中断常常发生冲突，当A线程持有某自旋锁，但被B线程中断了，B线程开始运行，尝试获取该自旋锁，
+//    但A只有在B返回之后才可以继续运行，才可能释放锁，由此发生死锁。为了防止这种情况，需要关中断。只有当外层嵌套的临界区计数清零之后才会开启中断。
+//    push_off和pop_off就是在维护临界区嵌套计数，并控制中断的打开与关闭。
 void
 push_off(void)
 {
