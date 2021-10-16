@@ -37,16 +37,17 @@ void
 binit(void)
 {
   struct buf *b;
-
-  initlock(&bcache.lock, "bcache");
+                                      // 两种粒度的锁，减小了并发访问的冲突
+  initlock(&bcache.lock, "bcache");   // 对整个buffer池设置一个锁
 
   // Create linked list of buffers
   bcache.head.prev = &bcache.head;
   bcache.head.next = &bcache.head;
+  // 共有NBUF个cache块，用循环将每个cache块插入以bcache.head为头的双向链表的头部，形成LRU buffer池。
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
     b->next = bcache.head.next;
     b->prev = &bcache.head;
-    initsleeplock(&b->lock, "buffer");
+    initsleeplock(&b->lock, "buffer");  // 对每个buffer块设置一个锁
     bcache.head.next->prev = b;
     bcache.head.next = b;
   }
@@ -74,6 +75,8 @@ bget(uint dev, uint blockno)
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
+  // LRU双向链表，从头部插入，要取出的时候，从尾部取出；
+  // 只有refcnt==0的cache块才可以被作为victim逐出cache。
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
     if(b->refcnt == 0) {
       b->dev = dev;
@@ -95,8 +98,8 @@ bread(uint dev, uint blockno)
   struct buf *b;
 
   b = bget(dev, blockno);
-  if(!b->valid) {
-    virtio_disk_rw(b, 0);
+  if(!b->valid) {   // 即使取到了，也要再check是不是valid
+    virtio_disk_rw(b, 0);  // 磁盘IO
     b->valid = 1;
   }
   return b;
@@ -106,7 +109,7 @@ bread(uint dev, uint blockno)
 void
 bwrite(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+  if(!holdingsleep(&b->lock))   // todo：holdingsleep和releasesleep
     panic("bwrite");
   virtio_disk_rw(b, 1);
 }
