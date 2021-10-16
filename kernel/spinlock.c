@@ -57,6 +57,7 @@ release(struct spinlock *lk)
   // and that loads in the critical section occur strictly before
   // the lock is released.
   // On RISC-V, this emits a fence instruction.
+  // todo: 锁和内存模型
   __sync_synchronize();
 
   // Release the lock, equivalent to lk->locked = 0.
@@ -66,6 +67,7 @@ release(struct spinlock *lk)
   // On RISC-V, sync_lock_release turns into an atomic swap:
   //   s1 = &lk->locked
   //   amoswap.w zero, zero, (s1)
+  // todo: 原子操作
   __sync_lock_release(&lk->locked);
 
   pop_off();
@@ -73,6 +75,8 @@ release(struct spinlock *lk)
 
 // Check whether this cpu is holding the lock.
 // Interrupts must be off.
+// Q: 为什么必须关闭关中断才能check cpu是不是持有锁？
+// A：应该是要保证当前线程不被切换cpu。
 int
 holding(struct spinlock *lk)
 {
@@ -84,7 +88,7 @@ holding(struct spinlock *lk)
 // push_off/pop_off are like intr_off()/intr_on() except that they are matched:
 // it takes two pop_off()s to undo two push_off()s.  Also, if interrupts
 // are initially off, then push_off, pop_off leaves them off.
-
+// todo：push和pop有什么功能？
 void
 push_off(void)
 {
