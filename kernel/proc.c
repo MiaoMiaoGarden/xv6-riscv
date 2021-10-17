@@ -542,6 +542,7 @@ forkret(void)
 
 // Atomically release lock and sleep on chan.
 // Reacquires lock when awakened.
+// sleep会释放lk锁，并且使当前进程带着chan标志入睡，然后进程调度出让cpu，当进程被唤醒的时候，
 void
 sleep(void *chan, struct spinlock *lk)
 {
@@ -592,6 +593,7 @@ wakeup(void *chan)
 // Kill the process with the given pid.
 // The victim won't exit until it tries to return
 // to user space (see usertrap() in trap.c).
+// exit使程序自行终止，kill允许一个进程请求另一个进程终止。
 int
 kill(int pid)
 {
