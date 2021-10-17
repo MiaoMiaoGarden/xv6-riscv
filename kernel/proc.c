@@ -62,7 +62,10 @@ procinit(void)
 int
 cpuid()
 {
-  int id = r_tp();
+  // r_yp(): read and write tp, the thread pointer, which holds
+  //         this core's hartid (core number), the index into cpus[].
+  
+  int id = r_tp();  
   return id;
 }
 
@@ -78,10 +81,10 @@ mycpu(void) {
 // Return the current struct proc *, or zero if none.
 struct proc*
 myproc(void) {
-  push_off();
+  push_off();  // 关中断（计算机运行过程中有许多代码段会要求关中断/开中断，只有已运行的所有代码段都要求开中断时，中断才会打开，只要有一个要求关中断，中断就会关闭）
   struct cpu *c = mycpu();
-  struct proc *p = c->proc;
-  pop_off();
+  struct proc *p = c->proc;   // 用汇编语言从寄存器得到cpu_id，从struct cpu得到当前正在运行的struct proc
+  pop_off();  // 开中断
   return p;
 }
 
@@ -90,8 +93,8 @@ allocpid() {
   int pid;
   
   acquire(&pid_lock);
-  pid = nextpid;
-  nextpid = nextpid + 1;
+  pid = nextpid;    
+  nextpid = nextpid + 1;    // pid按+1顺序递增
   release(&pid_lock);
 
   return pid;
@@ -105,7 +108,9 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-
+  // 在proc数组中查找一个UNUSED proc，以此来allocate proc
+  // 如果proc数组中没有UNUSED proc，则allocproc失败，返回0。
+  // todo: NPROC由什么决定？计算机最多能有多少个进程？
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == UNUSED) {
@@ -138,7 +143,7 @@ found:
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
-  p->context.ra = (uint64)forkret;
+  p->context.ra = (uint64)forkret;   // todo: ra寄存器是干嘛的
   p->context.sp = p->kstack + PGSIZE;
 
   return p;
@@ -232,6 +237,7 @@ userinit(void)
   
   // allocate one user page and copy init's instructions
   // and data into it.
+  // initproc进程是第一个用户进程，其用户pagetable上存放着initcode，initcode将执行/init
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
@@ -282,6 +288,7 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
+  // fork出的子进程的pagetable是复制了父进程的（扩展：copy on write）
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
@@ -296,6 +303,7 @@ fork(void)
   np->trapframe->a0 = 0;
 
   // increment reference counts on open file descriptors.
+  // fork创建出的子进程可以访问父进程的所有文件。
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
@@ -320,6 +328,8 @@ fork(void)
 
 // Pass p's abandoned children to init.
 // Caller must hold wait_lock.
+// 将原本父亲为p的子进程改为父亲为iniproc（孤儿进程的管理）
+// todo: initproc的作用
 void
 reparent(struct proc *p)
 {
@@ -336,6 +346,7 @@ reparent(struct proc *p)
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait().
+// 一个进程停止之后会转为僵尸态，直到其父进程调用了wait()
 void
 exit(int status)
 {
@@ -360,9 +371,11 @@ exit(int status)
 
   acquire(&wait_lock);
 
+  // 当一个进程停止，其子进程的管理权移交给init进程
   // Give any children to init.
   reparent(p);
-
+  
+  // 当一个进程停止，会唤醒其父进程
   // Parent might be sleeping in wait().
   wakeup(p->parent);
   
@@ -410,7 +423,7 @@ wait(uint64 addr)
           freeproc(np);
           release(&np->lock);
           release(&wait_lock);
-          return pid;
+          return pid;   // 调用wait()的父进程将只等待一个子进程结束，一旦发现一个zombie子进程就可以立即返回。
         }
         release(&np->lock);
       }
@@ -421,7 +434,7 @@ wait(uint64 addr)
       release(&wait_lock);
       return -1;
     }
-    
+    // 如果调用wait()时查询了一轮发现没有zombie状态的子进程，那么父进程将sleep（子进程exit()时会调用wakeup()来唤醒父进程重新查询一轮）
     // Wait for a child to exit.
     sleep(p, &wait_lock);  //DOC: wait-sleep
   }
@@ -443,7 +456,8 @@ scheduler(void)
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
-    intr_on();
+    intr_on();  // 开中断是为了避免死锁
+                // 循环开中断是为了防止cpu使用权交给RUNNING进程后中断被其关闭
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -453,7 +467,7 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
-        swtch(&c->context, &p->context);
+        swtch(&c->context, &p->context);   // 将cpu使用权交给进程p
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
@@ -471,6 +485,7 @@ scheduler(void)
 // be proc->intena and proc->noff, but that would
 // break in the few places where a lock is held but
 // there's no process.
+// todo: 为什么说这里是switch到了scheduler？
 void
 sched(void)
 {
@@ -498,12 +513,14 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  // 虽然通过yield放弃了cpu使用权，但scheduler也可能立即交予cpu使用权
   sched();
   release(&p->lock);
 }
 
 // A fork child's very first scheduling by scheduler()
 // will swtch to forkret.
+// todo:?
 void
 forkret(void)
 {
