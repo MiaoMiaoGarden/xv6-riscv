@@ -21,13 +21,13 @@ exec(char *path, char **argv)
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = myproc();
 
-  begin_op();
+  begin_op();  // todo:
 
   if((ip = namei(path)) == 0){
-    end_op();
+    end_op();   // todo:
     return -1;
   }
-  ilock(ip);
+  ilock(ip);  // todo: ilock()
 
   // Check ELF header
   if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))
@@ -35,7 +35,7 @@ exec(char *path, char **argv)
   if(elf.magic != ELF_MAGIC)
     goto bad;
 
-  if((pagetable = proc_pagetable(p)) == 0)
+  if((pagetable = proc_pagetable(p)) == 0)  // todo: proc_pagetable()
     goto bad;
 
   // Load program into memory.
@@ -68,10 +68,10 @@ exec(char *path, char **argv)
   // Use the second as the user stack.
   sz = PGROUNDUP(sz);
   uint64 sz1;
-  if((sz1 = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)
+  if((sz1 = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)  // 申请两页，前一页应该是保护帧
     goto bad;
   sz = sz1;
-  uvmclear(pagetable, sz-2*PGSIZE);
+  uvmclear(pagetable, sz-2*PGSIZE);  
   sp = sz;
   stackbase = sp - PGSIZE;
 
@@ -80,12 +80,12 @@ exec(char *path, char **argv)
     if(argc >= MAXARG)
       goto bad;
     sp -= strlen(argv[argc]) + 1;
-    sp -= sp % 16; // riscv sp must be 16-byte aligned
+    sp -= sp % 16; // riscv sp must be 16-byte aligned    // 字节对齐
     if(sp < stackbase)
       goto bad;
-    if(copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
+    if(copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)  //  将参数一一放置在pagetable的sp位置（参数压栈）
       goto bad;
-    ustack[argc] = sp;
+    ustack[argc] = sp;  // todo: ustack是干嘛的？
   }
   ustack[argc] = 0;
 
@@ -142,11 +142,11 @@ loadseg(pagetable_t pagetable, uint64 va, struct inode *ip, uint offset, uint sz
     pa = walkaddr(pagetable, va + i);
     if(pa == 0)
       panic("loadseg: address should exist");
-    if(sz - i < PGSIZE)
+    if(sz - i < PGSIZE)  // 不足一页的
       n = sz - i;
-    else
+    else    // >=一页，读一页
       n = PGSIZE;
-    if(readi(ip, 0, (uint64)pa, offset+i, n) != n)
+    if(readi(ip, 0, (uint64)pa, offset+i, n) != n)  // 一页一页read，放置在ip的连续位置处
       return -1;
   }
   
