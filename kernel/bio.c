@@ -23,6 +23,12 @@
 #include "fs.h"
 #include "buf.h"
 
+// 与cmu15-445中的结构不同，cmu实验中将所有buffer块用一个数组表示，并且将可以被逐出的块号用lru结构（一个双向链表+一个哈希表）另外记录。
+// xv6中所有的buffer块都使用双向链表结构存储，
+// 每次从buffer中找数据的时候，从头到尾查询一遍（没有哈希表，复杂度为O(n)）
+// 需要有新的buffer块的时候，从尾到头找一个ref_count = 0的块（没有将ref_count为0的块单独存储，不可直接从lru尾部直接提取块，而是要查找）
+// buffer块不被引用的时候（ref_count = 0），将其插入头部
+
 struct {
   struct spinlock lock;
   struct buf buf[NBUF];
