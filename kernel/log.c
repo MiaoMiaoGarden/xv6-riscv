@@ -33,15 +33,15 @@
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
 struct logheader {
-  int n;
-  int block[LOGSIZE];
+  int n;    // 日志块的数量
+  int block[LOGSIZE];  // 扇区号数组，每个扇区号对应一个日志块
 };
 
 struct log {
   struct spinlock lock;
   int start;
   int size;
-  int outstanding; // how many FS sys calls are executing.
+  int outstanding; // how many FS sys calls are executing. 统计当前系统调用的数量，乘以MAXOPBLOCKS可以计算已使用的日志空间。
   int committing;  // in commit(), please wait.
   int dev;
   struct logheader lh;
@@ -58,13 +58,14 @@ initlog(int dev, struct superblock *sb)
     panic("initlog: too big logheader");
 
   initlock(&log.lock, "log");
-  log.start = sb->logstart;
+  log.start = sb->logstart;  // dev和start指明了当前日志的logheader在磁盘中的位置
   log.size = sb->nlog;
   log.dev = dev;
-  recover_from_log();
+  recover_from_log();  // 初始化日志系统时，先将上次的日志恢复
 }
 
 // Copy committed blocks from log to their home location
+// 将已经提交的磁盘块写入到磁盘中应有的位置
 static void
 install_trans(int recovering)
 {
@@ -86,10 +87,10 @@ install_trans(int recovering)
 static void
 read_head(void)
 {
-  struct buf *buf = bread(log.dev, log.start);
+  struct buf *buf = bread(log.dev, log.start);  // 读取磁盘上log.dev设备上的log.start块号处的内容到内存（buffer）里。
   struct logheader *lh = (struct logheader *) (buf->data);
   int i;
-  log.lh.n = lh->n;
+  log.lh.n = lh->n;    // 将刚刚读取的一块内容赋值给log.lh，成为当前的logheader。
   for (i = 0; i < log.lh.n; i++) {
     log.lh.block[i] = lh->block[i];
   }
@@ -102,7 +103,7 @@ read_head(void)
 static void
 write_head(void)
 {
-  struct buf *buf = bread(log.dev, log.start);
+  struct buf *buf = bread(log.dev, log.start);  // 与read_head相反，将内存中的log写入到磁盘log.dev设备上的log.start块号处。
   struct logheader *hb = (struct logheader *) (buf->data);
   int i;
   hb->n = log.lh.n;
@@ -129,8 +130,10 @@ begin_op(void)
   acquire(&log.lock);
   while(1){
     if(log.committing){
+      // begin_op要求日志系统没有commiting（为了避免一个系统调用被分裂到不同的事务中）
       sleep(&log, &log.lock);
     } else if(log.lh.n + (log.outstanding+1)*MAXOPBLOCKS > LOGSIZE){
+      // begin_op要求有足够的空间来容纳这次调用的日志
       // this op might exhaust log space; wait for commit.
       sleep(&log, &log.lock);
     } else {
@@ -152,7 +155,7 @@ end_op(void)
   log.outstanding -= 1;
   if(log.committing)
     panic("log.committing");
-  if(log.outstanding == 0){
+  if(log.outstanding == 0){  // 如果当前没有系统调用正在进行（所有与这段日志有关的事务都已结束），则可以进行commit操作
     do_commit = 1;
     log.committing = 1;
   } else {
@@ -194,10 +197,10 @@ static void
 commit()
 {
   if (log.lh.n > 0) {
-    write_log();     // Write modified blocks from cache to log
-    write_head();    // Write header to disk -- the real commit
-    install_trans(0); // Now install writes to home locations
-    log.lh.n = 0;
+    write_log();     // Write modified blocks from cache to log 将事务中修改的每个块从buffer缓存中复制到磁盘上的日志槽中
+    write_head();    // Write header to disk -- the real commit  将header块写到磁盘上，表明已经提交，为提交点，写完日志后的崩溃会导致在重启后重新执行日志
+    install_trans(0); // Now install writes to home locations  从日志中读取每个块，并将其写到文件系统中的对应位置
+    log.lh.n = 0;     // 修改日志计数器为0，并写入日志空间的header部分，这必须在下一个事务开始之前修改，这样崩溃就不会导致重启后的回复使用这次的header和下次的日志块
     write_head();    // Erase the transaction from the log
   }
 }
@@ -211,6 +214,7 @@ commit()
 //   modify bp->data[]
 //   log_write(bp)
 //   brelse(bp)
+// 
 void
 log_write(struct buf *b)
 {
@@ -223,7 +227,8 @@ log_write(struct buf *b)
     panic("log_write outside of trans");
 
   for (i = 0; i < log.lh.n; i++) {
-    if (log.lh.block[i] == b->blockno)   // log absorption
+    // log absorption 当一个块在一个事务中被多次写入时，他们在日志中的槽是相同的，通过将几次磁盘写吸收为一次，节省了写磁盘次数，可获得更好的性能
+    if (log.lh.block[i] == b->blockno)   
       break;
   }
   log.lh.block[i] = b->blockno;
