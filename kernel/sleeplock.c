@@ -26,8 +26,8 @@ acquiresleep(struct sleeplock *lk)
 {
   acquire(&lk->lk);
   while (lk->locked) {
-    // 通过sleep出让cpu？
-    sleep(lk, &lk->lk);  // todo: sleep如何实现？
+    // 当前进程sleep在lk->lk的chan上，当有其他进程唤醒lk->lk的chan上的sleep状态进程时，当前进程进入runnable状态。
+    sleep(lk, &lk->lk); 
   }
   lk->locked = 1;
   lk->pid = myproc()->pid;
