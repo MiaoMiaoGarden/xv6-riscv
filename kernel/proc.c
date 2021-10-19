@@ -467,11 +467,11 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
-        swtch(&c->context, &p->context);   // 将cpu使用权交给进程p
+        swtch(&c->context, &p->context);   // 运行进程p：当前寄存器组保存在mycpu()->context中，从p->context中load寄存器组
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
-        c->proc = 0;
+        c->proc = 0;   // 执行到这里的时候，p已经执行完毕，因此设置当前cpu运行的proc为0
       }
       release(&p->lock);
     }
@@ -485,7 +485,6 @@ scheduler(void)
 // be proc->intena and proc->noff, but that would
 // break in the few places where a lock is held but
 // there's no process.
-// todo: 为什么说这里是switch到了scheduler？
 void
 sched(void)
 {
@@ -502,7 +501,8 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context);
+  // swtch将当前寄存器组保存回myproc中，并且将cpu中的保存的寄存器组恢复，应该会跳到470行+1的位置继续执行，也就是继续运行调度程序。
+  swtch(&p->context, &mycpu()->context);  
   mycpu()->intena = intena;
 }
 
