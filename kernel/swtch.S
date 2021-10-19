@@ -2,8 +2,9 @@
 #
 #   void swtch(struct context *old, struct context *new);
 # 
-# Save current registers in old. Load from new.	
+# Save current registers in old. Load from new.
 
+// 将当前的寄存器组的值存放在第一个参数指向的位置，并且从第二个参数指向的位置中取出寄存器组的值作为当前值
 
 .globl swtch
 swtch:
