@@ -478,6 +478,8 @@ scheduler(void)
   }
 }
 
+// sched和schedule之间的切换只需要转换context，这两个线程互为协程，不用切换栈帧，只用切换寄存器组（这可能是xv6中唯一的协程用例）
+
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
 // intena because intena is a property of this
