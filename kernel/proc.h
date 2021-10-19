@@ -83,6 +83,7 @@ struct trapframe {
 // cpu和proc结构中都有context保存寄存器组
 // cpu中的寄存器组保存的是调度程序运行的寄存器组，是从调度程序跳转到新的proc运行时需要保存的，当恢复时会进行再次调度；
 // proc中的寄存器组保存的是进程运行时的寄存器组，是进程被暂时detach的时候暂存寄存器组的位置，当恢复时会继续执行这个进程。
+// cpu中的context可以为协程提供了结构基础
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -104,7 +105,7 @@ struct proc {
   uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
   pagetable_t pagetable;       // User page table
-  struct trapframe *trapframe; // data page for trampoline.S
+  struct trapframe *trapframe; // data page for trampoline.S   trapframe是cpu结构中没有的，每个proc自己维护，不像context需要在调度的时候暂存在cpu中（协程）
   struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
