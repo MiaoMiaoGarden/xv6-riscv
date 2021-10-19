@@ -67,6 +67,7 @@ balloc(uint dev)
   int b, bi, m;
   struct buf *bp;
 
+  // 遍历，找到一块未使用的，初始化之后分配出去
   bp = 0;
   for(b = 0; b < sb.size; b += BPB){
     bp = bread(dev, BBLOCK(b, sb));
