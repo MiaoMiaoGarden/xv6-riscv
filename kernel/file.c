@@ -26,6 +26,7 @@ fileinit(void)
 }
 
 // Allocate a file structure.
+// 在ftable中找出一个ref为0 的file分配出去
 struct file*
 filealloc(void)
 {
@@ -33,7 +34,7 @@ filealloc(void)
 
   acquire(&ftable.lock);
   for(f = ftable.file; f < ftable.file + NFILE; f++){
-    if(f->ref == 0){
+    if(f->ref == 0){    // 这里用ref==0判断是不是空闲，而不是用f->type==FD_NONE？
       f->ref = 1;
       release(&ftable.lock);
       return f;
@@ -44,6 +45,7 @@ filealloc(void)
 }
 
 // Increment ref count for file f.
+// 增加file的ref，但如果ref==0，说明内核已经从内存中丢弃了这个inode，因此不能随意ref++，于是panic
 struct file*
 filedup(struct file *f)
 {
@@ -62,7 +64,7 @@ fileclose(struct file *f)
   struct file ff;
 
   acquire(&ftable.lock);
-  if(f->ref < 1)
+  if(f->ref < 1)  // f->ref==0表示file已经被close了，内核已经将其从内存中丢弃，再请求close会panic
     panic("fileclose");
   if(--f->ref > 0){
     release(&ftable.lock);
@@ -77,7 +79,7 @@ fileclose(struct file *f)
     pipeclose(ff.pipe, ff.writable);
   } else if(ff.type == FD_INODE || ff.type == FD_DEVICE){
     begin_op();
-    iput(ff.ip);
+    iput(ff.ip);    // todo：写入磁盘吗
     end_op();
   }
 }
