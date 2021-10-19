@@ -1,5 +1,5 @@
 // Saved registers for kernel context switches.
-struct context {
+struct context {   // 寄存器组
   uint64 ra;
   uint64 sp;
 
@@ -21,7 +21,7 @@ struct context {
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
-  struct context context;     // swtch() here to enter scheduler().
+  struct context context;     // swtch() here to enter scheduler().   // 调用swtch函数的时候，用汇编语言对context进行保存和恢复
   int noff;                   // Depth of push_off() nesting.  临界区嵌套的计数，用于锁控制的关中断和开中断。
   int intena;                 // Were interrupts enabled before push_off()?
 };
@@ -79,6 +79,10 @@ struct trapframe {
   /* 272 */ uint64 t5;
   /* 280 */ uint64 t6;
 };
+
+// cpu和proc结构中都有context保存寄存器组
+// cpu中的寄存器组保存的是调度程序运行的寄存器组，是从调度程序跳转到新的proc运行时需要保存的，当恢复时会进行再次调度；
+// proc中的寄存器组保存的是进程运行时的寄存器组，是进程被暂时detach的时候暂存寄存器组的位置，当恢复时会继续执行这个进程。
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
