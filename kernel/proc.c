@@ -542,7 +542,8 @@ forkret(void)
 
 // Atomically release lock and sleep on chan.
 // Reacquires lock when awakened.
-// sleep会释放lk锁，并且使当前进程带着chan标志入睡，然后进程调度出让cpu，当进程被唤醒的时候，
+// sleep会释放lk锁，并且使当前进程带着chan标志入睡，然后进程调度出让cpu，当进程被唤醒的时候，重新获取lk锁
+// （睡眠的时候既释放cpu又释放lk锁，且持有p进程锁，p进程的内容不会被修改）
 void
 sleep(void *chan, struct spinlock *lk)
 {
@@ -562,10 +563,10 @@ sleep(void *chan, struct spinlock *lk)
   p->chan = chan;
   p->state = SLEEPING;
 
-  sched();
+  sched();  // 进程调度的时候将下一行压栈
 
   // Tidy up.
-  p->chan = 0;
+  p->chan = 0;  // 进程调度使p进程重新执行的时候，从这里开始继续执行。
 
   // Reacquire original lock.
   release(&p->lock);
@@ -578,7 +579,7 @@ void
 wakeup(void *chan)
 {
   struct proc *p;
-
+  // 通过遍历查找的方式找到需要被唤醒的proc，会将所有在chan上睡眠的进程设置为runnable，具体运行谁就看schedule的调度了。
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p != myproc()){
       acquire(&p->lock);
@@ -600,7 +601,7 @@ kill(int pid)
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++){
-    acquire(&p->lock);
+    acquire(&p->lock);   // tips：如果进程在sleep，持有p->lock锁，那么kill的这一行会阻塞
     if(p->pid == pid){
       p->killed = 1;
       if(p->state == SLEEPING){
